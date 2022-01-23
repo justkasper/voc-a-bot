@@ -243,7 +243,7 @@ def add_word(update, context):
     """
     var_text = 'New word'  # Variational phrase depending if word is already added
     uid = str(update.message.chat_id)
-    word = update.message.text.lower()
+    word = update.message.text.lower().split(' ')[0]  # Use only first word in case of phrase
     word = conjugate(word)  # conjugation of verbs
 
     record = send_query(f"select count(word) from words where word = '{word}'")
@@ -427,17 +427,32 @@ def play_game(update, context):
 
     if len(record) < 3:
         context.bot.send_message(chat_id=update.effective_chat.id,
-                                 text='Чтобы сохранилась интрига, для игры нужно 3 слова в словарике')
+                                 text='Чтобы сохранилась интрига, в словаре должно быть 3 слова с разными значениями')
     elif len(record) >= 3:  # Больше 3 слов и прошлое слово отличается от нового
         user_words = [record[i][0] for i in range(len(record))]
         main_word = choice(user_words)
         record = send_query(f"select max(word) from games where uid = '{uid}';")
         while record[0][0] == main_word:    # pick word until != last round word
             main_word = choice(user_words)
+
+        # Delete from word-list words with same meaning as main word
+        record = send_query(f"""select uw.word 
+                                from user_words uw join words w on w.word = uw.word
+                                where uid = '{uid}' 
+                                    and is_deleted = False 
+                                    and translation_score < 5
+                                    and uw.word != '{main_word}'
+                                    and w.meaning != (select meaning from words where word = '{main_word}') 
+                                    ;""")
+        user_words = [record[i][0] for i in range(len(record))]
+        if len(user_words) < 2:
+            context.bot.send_message(chat_id=update.effective_chat.id,
+                                     text='Чтобы сохранилась интрига, '
+                                          'в словаре должно быть 3 слова с разными значениями')
+            
         game_words = [main_word]  # list with quiz words
         list_len = len(user_words) // 6  # len of list with dummies
         list_len = 2 if list_len <= 2 else 8 if list_len >= 8 else list_len
-        user_words.remove(main_word)
         for _ in range(list_len):
             dummy = choice(user_words)
             game_words.append(dummy)
