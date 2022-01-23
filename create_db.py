@@ -35,7 +35,8 @@ create_games = f"""
             uid int,
             word varchar(30),
             answer_var int,
-            translation_score int
+            translation_score int,
+            meaning varchar(50)
             );"""
 create_users = f"""
             create table if not exists users

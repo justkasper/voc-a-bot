@@ -13,9 +13,9 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Conve
 from functools import wraps
 from random import choice, shuffle
 from threading import Thread
+# from datetime import time
 from bs4 import BeautifulSoup
 from google_trans_new import google_translator
-
 PORT = int(os.environ.get('PORT', '5000'))
 PLAY = range(1)  # var for ConversationHandler
 
@@ -88,6 +88,14 @@ def send_query(sql_query: str, var=None):
     conn.commit()
     conn.close()
     return record
+
+
+def log_user(uid, update):
+    send_query(f"""insert into users select '{uid}',
+                    '{update.message.chat.first_name}',
+                    '{update.message.chat.last_name}', 
+                    '{update.message.chat.username}'
+                    where not exists (select uid from users where uid = '{uid}'); """)
 
 
 def conjugate(input_):
@@ -182,15 +190,11 @@ def start(update, context):
 
     # Send message
     context.bot.send_message(chat_id=update.effective_chat.id,
-                             text="Hello, i am Voc! I will help you to build your vocabulary.\n"
-                                  "Type /help to see what I can do")
+                             text="Привет, я Voc! Я могу помочь тебе развить свой словарь.\n"
+                                  "Команда /help покажет, что я могу")
     # Log action into user_actions table
     send_query(f"insert into user_actions (uid, action) values ('{uid}', 'start')")
-    send_query(f"""insert into users select '{uid}',
-                    '{update.message.chat.first_name}',
-                    '{update.message.chat.last_name}', 
-                    '{update.message.chat.username}'
-                    where not exists (select uid from users where uid = '{uid}'); """)
+    log_user(uid, update)  # Log user into users table
 
 
 # Help handler with readme
@@ -198,26 +202,36 @@ def help_me(update, context):
     uid = str(update.message.chat_id)
 
     # Send message
+    # context.bot.send_message(chat_id=update.effective_chat.id,
+    #                          text="Add words to your dictionary by just sending them to me.\n"
+    #                               "I will translate them, find usage and add them to your voc-a-bulary.\n\n"
+    #                               "Sometimes i can't find words you want to add. "
+    #                               "In this case you can add word using /add [word][-][meaning].\n"
+    #                               "You can delete words with /delete [word] command.\n"
+    #                               "Or you can edit them with /edit [word][-][new translation] command.\n"
+    #                               "To see your vocabulary type /voc.\n"
+    #                               "Sending /stats will display your learning summary statistics\n\n"
+    #                               "To start learning words type /play. I will send you word, it's usage and "
+    #                               "You have to guess the right translation from a given list\n\n"
+    #                             "And you're always welcome to message my owner any concerns or wishes with /m command"
+    #                          )
     context.bot.send_message(chat_id=update.effective_chat.id,
-                             text="Add words to your dictionary by just sending them to me.\n"
-                                  "I will translate them, find usage and add them to your voc-a-bulary.\n\n"
-                                  "Sometimes i can't find words you want to add. "
-                                  "In this case you can add word using /add [word][-][meaning].\n"
-                                  "You can delete words with /delete [word] command.\n"
-                                  "Or you can edit them with /edit [word][-][new translation] command.\n"
-                                  "To see your vocabulary type /voc.\n"
-                                  "Sending /stats will display your learning summary statistics\n\n"
-                                  "To start learning words type /play. I will send you word, it's usage and "
-                                  "You have to guess the right translation from a given list\n\n"
-                                  "And you're always welcome to message my owner any concerns or wishes with /m command"
+                             text="Чтобы добавить слово в словарь, отправь его мне в чат.\n"
+                                  "Я сделаю перевод и добавлю его в твой личный словарь.\n"
+                                  "Если это слово будет на русском - я переведу его\n\n"
+                                  "Иногда у меня не получается найти нужное слово. "
+                                  "В этом случае ты можешь использовать команду /add [слово][-][значение].\n"
+                                  "Удалить слово ты можешь командой /delete [слово] .\n"
+                                  "А изменить значение можно командой /edit [слово][-][новое значение].\n"
+                                  "Твой личный словарь откроется по команде /voc.\n"
+                                  "Если отправишь /stats , я покажу небольшую статистику освоения словаря\n\n"
+                                  "Активное изучение начинается с команды /play. Я пришлю тебе слово и "
+                                  "пример его употребления. А тебе нужно будет выбрать правильный вариант из списка\n\n"
+                                  "Оставить обратную связь для мешка, который меня сделал, можно командой /m \U0001F60B"
                              )
     # Log action into user_actions table
     send_query(f"insert into user_actions (uid, action) values ('{uid}', 'help')")
-    send_query(f"""insert into users select '{uid}',
-                    '{update.message.chat.first_name}',
-                    '{update.message.chat.last_name}', 
-                    '{update.message.chat.username}'
-                    where not exists (select uid from users where uid = '{uid}'); """)
+    log_user(uid, update)  # Log user into users table
 
 
 # Bot commands block
@@ -246,11 +260,11 @@ def add_word(update, context):
                 # Log action into user_actions table
                 send_query(f"insert into user_actions (uid, action) values ('{uid}', 'add_word_fail_example')")
                 context.bot.send_message(chat_id=update.effective_chat.id,
-                                         text=f"Can't find examples for this word \U0001F914")
+                                         text=f"Не получилось найти пример использования этого слова \U0001F914")
         except Exception:
             # Log action into user_actions table
             send_query(f"insert into user_actions (uid, action) values ('{uid}', 'add_word_fail')")
-            context.bot.send_message(chat_id=update.effective_chat.id, text=f"Can't find this word \U0001F914")
+            context.bot.send_message(chat_id=update.effective_chat.id, text=f"Я не смог найти это слово \U0001F914")
             raise
 
     # Add word to user personal dict if it's not there. Else change output message
@@ -261,7 +275,7 @@ def add_word(update, context):
     elif record[0][1] == 1:
         send_query(f"update user_words set is_deleted = False where uid = '{uid}' and word = '{word}'")
     elif record[0][1] == 0:
-        var_text = 'This word is already in the dictionary'
+        var_text = 'Слово уже есть словаре'
 
     # Send message
     record = send_query(f"""
@@ -271,7 +285,7 @@ def add_word(update, context):
 
     real_meaning = record[0][1] if record[0][0] == 0 else record[0][3]
     if record[0][2]:
-        string_ = f"Example:\n{choice(record[0][2])}"
+        string_ = f"Пример:\n{choice(record[0][2])}"
 
     else:
         string_ = ''
@@ -279,6 +293,8 @@ def add_word(update, context):
                              text=f"{var_text}:\n{word} - {real_meaning}\n\n" + string_)
     # Log action into user_actions table
     send_query(f"insert into user_actions (uid, action) values ('{uid}', 'add_word')")
+
+    log_user(uid, update)  # Log user into users table
 
 
 @send_typing_action
@@ -298,7 +314,7 @@ def add_words_manually(update, context):
         send_query(f"""insert into user_words (uid, word, is_edited, edit) 
                         values ('{uid}', '{word}', True, '{meaning}'); """)
     context.bot.send_message(chat_id=update.effective_chat.id,
-                             text=f"Word {word} added successfully")
+                             text=f"Слово {word} добавлено")
     # Log action into user_actions table
     send_query(f"insert into user_actions (uid, action) values ('{uid}', 'add_manual')")
 
@@ -313,12 +329,12 @@ def translate_russian(update, context):
     try:
         translation_result = translation(word)
         context.bot.send_message(chat_id=update.effective_chat.id,
-                                 text=f'Translation:\n{word} - {translation_result}')
+                                 text=f'Перевод:\n{word} - {translation_result}')
         # Log action into user_actions table
         send_query(f"insert into user_actions (uid, action) values ('{uid}', 'translate_russian')")
     except Exception:
         context.bot.send_message(chat_id=update.effective_chat.id,
-                                 text=f"I've failed You, master \U0001F630")
+                                 text=f"Упс, проблемы \U0001F630")
         # Log action into user_actions table
         send_query(f"insert into user_actions (uid, action) values ('{uid}', 'translate_russian_fail')")
 
@@ -364,11 +380,11 @@ def edit(update, context):
                        where uid = '{uid}' and word = '{word}'""")
 
         context.bot.send_message(chat_id=update.effective_chat.id,
-                                 text=f'New meaning:\n\n'f'{word} - {new_meaning} ')
+                                 text=f'Новое значение:\n\n'f'{word} - {new_meaning} ')
         # Log action into user_actions table
         send_query(f"insert into user_actions (uid, action) values ('{uid}', 'edit')")
     else:
-        context.bot.send_message(chat_id=update.effective_chat.id, text=f"I don't keep such word")
+        context.bot.send_message(chat_id=update.effective_chat.id, text=f"Пока я не храню такое слово")
         # Log action into user_actions table
         send_query(f"insert into user_actions (uid, action) values ('{uid}', 'edit_fail')")
 
@@ -386,7 +402,7 @@ def voc(update, context):
                 order by 1;
                 """
     record = send_query(sql_query)
-    response = f"We have {len(record)} words to learn:\n\n"
+    response = f"Сейчас в словаре {len(record)} слов:\n\n"
     for i in range(len(record)):
         if record[i][4] == 0:
             response += record[i][0] + ' - ' + record[i][1] + '\n'
@@ -394,7 +410,7 @@ def voc(update, context):
             response += record[i][0] + ' - ' + record[i][3] + '\n'
     if not record:
         context.bot.send_message(chat_id=update.effective_chat.id,
-                                 text='Your vocab is empty yet. Add some words \U0001F61C')
+                                 text='Словарик пока пуст. Пришли мне несколько слов \U0001F61C')
     else:
         context.bot.send_message(chat_id=update.effective_chat.id, text=response)
     # Log action into user_actions table
@@ -411,7 +427,7 @@ def play_game(update, context):
 
     if len(record) < 3:
         context.bot.send_message(chat_id=update.effective_chat.id,
-                                 text='Add at least 3 words to start learning')
+                                 text='Чтобы сохранилась интрига, для игры нужно 3 слова в словарике')
     elif len(record) >= 3:  # Больше 3 слов и прошлое слово отличается от нового
         user_words = [record[i][0] for i in range(len(record))]
         main_word = choice(user_words)
@@ -442,23 +458,24 @@ def play_game(update, context):
                 send_query(f"""update games 
                                     set word = '{main_word}',
                                     answer_var = {i + 1}, 
-                                    translation_score = {record[0][5]}
+                                    translation_score = {record[0][5]},
+                                    meaning = '{real_meaning}'
                                 where uid = '{uid}'; """)
         reply_string = '\n'.join([f"{i+1}. {meaning[i]}" for i in range(len(meaning))])
         context.bot.send_message(chat_id=update.effective_chat.id,
-                                 text=f"{example}\n\nWord *{main_word}* means:\n" + reply_string +
-                                      "\n\nPrint the correct answer number or 0 to *exit*",
+                                 text=f"{example}\n\nЗначение слова *{main_word}*:\n" + reply_string +
+                                      "\n\nВведи номер правильного ответа или 0 для *выхода*",
                                  parse_mode=telegram.ParseMode.MARKDOWN)
 
 
 @send_typing_action
 def play_intro(update, context):
     uid = str(update.message.chat_id)
-    send_query(f"""insert into games select '{uid}', '', 0, 0
+    send_query(f"""insert into games select '{uid}', '', 0, 0, ''
                     where not exists (select uid from games where uid = '{uid}'); """)
     context.bot.send_message(chat_id=update.effective_chat.id,
-                             text="I'll send you word, try to guess the right translation\n"
-                                  "After you guess right 5 times the word will be marked as known and will be gone",
+                             text="Сейчас я отправлю слово. Попробуй выбрать правильный вариант ответа\n"
+                                  "После 5 правильных ответов я помечу, что слово изучено и уберу его из словарика",
                              parse_mode=telegram.ParseMode.MARKDOWN)
     play_game(update, context)
     send_query(f"insert into user_actions (uid, action) values ('{uid}', 'play')")
@@ -469,11 +486,11 @@ def play_intro(update, context):
 def play(update, context):
     uid = str(update.message.chat_id)
     word = update.message.text
-    record = send_query(f"""select word, answer_var, translation_score 
+    record = send_query(f"""select word, answer_var, translation_score, meaning
                             from games where uid = '{uid}'; """)
     if word == str(record[0][1]):
         context.bot.send_message(chat_id=update.effective_chat.id,
-                                 text=f"Great job! \U0001F64C\n\n*{record[0][0]}* score is {record[0][2] + 1}",
+                                 text=f"Отлично! \U0001F64C\n\nСчет *{record[0][0]}*: {record[0][2] + 1}",
                                  parse_mode=telegram.ParseMode.MARKDOWN)
         send_query(f"insert into user_actions (uid, action) values ('{uid}', 'win')")
         # If it's 5th guess for the word mark word as deleted else add 1 score point
@@ -481,7 +498,7 @@ def play(update, context):
             send_query(f"""update user_words set is_deleted=True, translation_score = {record[0][2] + 1}
                             where uid = '{uid}' and word = '{record[0][0]}';""")
             context.bot.send_message(chat_id=update.effective_chat.id,
-                                     text=f"Congrats you've learned word *{record[0][0]}*!",
+                                     text=f"Так держать! Слово *{record[0][0]}* изучено!",
                                      parse_mode=telegram.ParseMode.MARKDOWN)
             send_query(f"insert into user_actions (uid, action) values ('{uid}', 'translation_mastered')")
         else:
@@ -491,8 +508,8 @@ def play(update, context):
     elif word != str(record[0][1]):
         score = 0 if record[0][2] == 0 else record[0][2] - 1
         context.bot.send_message(chat_id=update.effective_chat.id,
-                                 text=f"I believe you can do better next time \U0001F609"
-                                      f"\n\n*{record[0][0]}* score is {score}",
+                                 text=f"Это ошибка \U0001F609\nЗначение слова {record[0][0]} - {record[0][3]} "
+                                      f"\n\nСчет слова *{record[0][0]}*: {score}",
                                  parse_mode=telegram.ParseMode.MARKDOWN)
         send_query(f"insert into user_actions (uid, action) values ('{uid}', 'lose')")
         if record[0][2] > 0:
@@ -504,7 +521,7 @@ def play(update, context):
 
 
 def cancel(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text=f"OK, See ya! \U0001F64B")
+    context.bot.send_message(chat_id=update.effective_chat.id, text=f"Приходи играть ещё! \U0001F64B")
     return ConversationHandler.END
 
 
@@ -515,14 +532,14 @@ def user_statistics(update, context):
     record = send_query(f"""select  count(case when is_deleted = False then word end), 
                                     count(case when translation_score = 5 then word end)
                             from user_words where uid = '{uid}'; """)
-    reply = f"You've added *{record[0][0] + record[0][1]}* words in total and mastered *{record[0][1]}* of them.\n\n"
+    reply = f"Из *{record[0][0] + record[0][1]}* добавленных слов успешно изучено *{record[0][1]}*.\n\n"
     record = send_query(f"""select count(case when action in ('win', 'lose') then 1 end),
                                     count(case when action = 'win' then 1 end),
                                     count(case when action = 'translation_mastered' then 1 end)
                             from user_actions where uid = '{uid}' and dttm >= now() - interval '7 days'
                                     ;""")
-    reply += f"Last week You've passed {record[0][1]} of {record[0][0]} attempts in total, " \
-             f"and learnt {record[0][2]} new words.\n\nGood job, keep going \U0001F44F"
+    reply += f"Удачных попыток за последнюю неделю: {record[0][1]}.\nВсего попыток: {record[0][0]}. " \
+             f"\nИзучено слов: {record[0][2]}.\n\nПрекрасная работа, не останавливайся \U0001F44F"
 
     context.bot.send_message(chat_id=update.effective_chat.id,
                              text=reply,
